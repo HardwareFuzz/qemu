@@ -180,6 +180,26 @@ static int vfp_gdb_set_sysreg(CPUARMState *env, uint8_t *buf, int reg)
     return 0;
 }
 
+static int a32_spsr_gdb_get_reg(CPUARMState *env, GByteArray *buf, int reg)
+{
+    uint32_t mode = env->uncached_cpsr & CPSR_M;
+
+    if (reg != 0 || mode == ARM_CPU_MODE_USR || mode == ARM_CPU_MODE_SYS) {
+        return 0;
+    }
+    /*
+     * env->spsr is the live current-mode value. banked_spsr[] contains the
+     * inactive banks and can be stale for the currently selected mode.
+     */
+    return gdb_get_reg32(buf, env->spsr);
+}
+
+static int a32_spsr_gdb_set_reg(CPUARMState *env, uint8_t *buf, int reg)
+{
+    /* Observation only: do not offer a new way to alter saved target state. */
+    return 0;
+}
+
 static int mve_gdb_get_reg(CPUARMState *env, GByteArray *buf, int reg)
 {
     switch (reg) {
@@ -467,6 +487,12 @@ const char *arm_gdb_get_dynamic_xml(CPUState *cs, const char *xmlname)
         return cpu->dyn_svereg_xml.desc;
     } else if (strcmp(xmlname, "arm-m-system.xml") == 0) {
         return cpu->dyn_m_systemreg_xml.desc;
+    } else if (strcmp(xmlname, "arm-spsr.xml") == 0) {
+        return "<?xml version=\"1.0\"?>"
+               "<!DOCTYPE target SYSTEM \"gdb-target.dtd\">"
+               "<feature name=\"org.gnu.gdb.arm.spsr\">"
+               "<reg name=\"spsr\" bitsize=\"32\"/>"
+               "</feature>";
 #ifndef CONFIG_USER_ONLY
     } else if (strcmp(xmlname, "arm-m-secext.xml") == 0) {
         return cpu->dyn_m_secextreg_xml.desc;
@@ -520,6 +546,9 @@ void arm_cpu_register_gdb_regs_for_features(ARMCPU *cpu)
                                      17, "arm-vfp.xml", 0);
         }
         if (!arm_feature(env, ARM_FEATURE_M)) {
+            gdb_register_coprocessor(cs, a32_spsr_gdb_get_reg,
+                                     a32_spsr_gdb_set_reg,
+                                     1, "arm-spsr.xml", 0);
             /*
              * A and R profile have FP sysregs FPEXC and FPSID that we
              * expose to gdb.

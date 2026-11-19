@@ -43,14 +43,13 @@ static TCGv_ptr get_tile_rowcol(DisasContext *s, int esz, int rs,
 
     /* Compute the final index, which is Rs+imm. */
     tmp = tcg_temp_new_i32();
+    tcg_gen_trunc_tl_i32(tmp, cpu_reg(s, rs));
+    tcg_gen_addi_i32(tmp, tmp, index);
 
     /* Prepare a power-of-two modulo via extraction of @len bits. */
     len = ctz32(streaming_vec_reg_size(s)) - esz;
 
-    if (len == 0) {
-        /* TCG deposit requires nonzero width; modulo one is always zero. */
-        tcg_gen_movi_i32(tmp, 0);
-    } else if (vertical) {
+    if (vertical) {
         /*
          * Compute the byte offset of the index within the tile:
          *     (index % (svl / size)) * size
@@ -59,8 +58,6 @@ static TCGv_ptr get_tile_rowcol(DisasContext *s, int esz, int rs,
          * Perform the multiply by shifting left by @pos bits.
          * Perform these operations simultaneously via deposit into zero.
          */
-        tcg_gen_trunc_tl_i32(tmp, cpu_reg(s, rs));
-        tcg_gen_addi_i32(tmp, tmp, index);
         pos = esz;
         tcg_gen_deposit_z_i32(tmp, tmp, pos, len);
 
@@ -77,8 +74,6 @@ static TCGv_ptr get_tile_rowcol(DisasContext *s, int esz, int rs,
          *     (index % (svl / size)) * (size * sizeof(row))
          *   = (index % (svl >> esz)) << (esz + log2(sizeof(row)))
          */
-        tcg_gen_trunc_tl_i32(tmp, cpu_reg(s, rs));
-        tcg_gen_addi_i32(tmp, tmp, index);
         pos = esz + ctz32(sizeof(ARMVectorReg));
         tcg_gen_deposit_z_i32(tmp, tmp, pos, len);
 
